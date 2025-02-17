@@ -1,30 +1,30 @@
 import WebSocket, { WebSocketServer } from "ws";
 import http from "http";
+import { findSourceMap } from "module";
 
 const server = http.createServer(function (request: any, response: any) {
     console.log(new Date() + " Received request for " + request.url);
     response.end("hi there");
   });
 
-  const rooms = new Map();
+  const rooms= new Map();
 const wss= new WebSocketServer({server})
 
 wss.on("connection",function connection(ws:WebSocket){
     let roomId ="";
-    let userPosition = { x: 0, y: 400 };
-    const userId = Math.random().toString();
+    let userPosition = { x: 96, y: 80 };
+    const userId = Math.random();
     ws.on("error",console.error)
     ws.on("message", (message:string) => {
         const parsedMessage = JSON.parse(message);
         if (parsedMessage.event == "join") {
           roomId = parsedMessage.data.roomId;
           if (!rooms.has(roomId)) {
-            rooms.set(roomId, []);
+            rooms.set(roomId, [{id:userId,connection:ws,userPosition}]);
           }else{
-            rooms.get(roomId).push({id:userId,connection:ws});
+            rooms.get(roomId).push({id:userId,connection:ws,userPosition});
           }
         }
-        userPosition = { x: 96, y: 80 };
         if(parsedMessage.event === "join"){
         ws.send(
           JSON.stringify({
@@ -32,14 +32,14 @@ wss.on("connection",function connection(ws:WebSocket){
             playerList:rooms.get(roomId),
             data: {
               userId,
-              x: userPosition.x,
-              y: userPosition.y,
+              userPosition
             },
           })
         );
         broadcastData(roomId,{
           event:"User added",
-          playerList:rooms.get(roomId)
+          userId,
+          userPosition
         })
       }
       if (parsedMessage.event === "position") {
@@ -53,12 +53,18 @@ wss.on("connection",function connection(ws:WebSocket){
             }),
           );
         }else{
+          const updatedPlayersPositioning=rooms.get(roomId)||[]
+          updatedPlayersPositioning.forEach((user:any)=>{
+            if(user.connection==ws){
+              user.userPosition=userPosition
+            }
+          })
+         rooms.set(roomId,updatedPlayersPositioning)
           broadcastData(roomId, {
             event: "position-update",
             data: {
               userId,
-              x: userPosition.x,
-              y: userPosition.y,
+              userPosition
             },
           });
         }
@@ -70,7 +76,7 @@ wss.on("connection",function connection(ws:WebSocket){
         rooms.set(roomId, users);
         broadcastData(roomId, {
           event: "userLeft",
-          playerList:rooms.get(roomId)
+          userId
         }); 
       }
     });
